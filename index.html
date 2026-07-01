@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1" />
+<title>Slices — Calculus 1, 2 &amp; 3 Lab</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<div class="topbar">
+  <div class="brand">
+    <button id="hamburger" aria-label="Toggle menu">☰</button>
+    <span class="mark">Slices</span>
+    <span class="tag">Calc 1 · 2 · 3 lab</span>
+  </div>
+  <div class="top-actions">
+    <button id="musicBtn"><span class="dot"></span><span id="musicIcon">🔈</span><span id="musicLbl">Music: off</span></button>
+  </div>
+</div>
+
+<audio id="bgm" src="track.mp3" loop preload="none"></audio>
+
+<div id="mathFloaters" aria-hidden="true"></div>
+
+<div class="scrim" id="scrim"></div>
+
+<div class="app">
+  <nav class="sidebar" id="sidebar"><!-- populated by JS from MODULES config --></nav>
+
+  <main>
+    <div class="hero">
+      <p class="eyebrow" id="courseLabel">Calculus 1</p>
+      <h1 id="moduleTitle">Loading…</h1>
+      <p id="moduleSub"></p>
+    </div>
+    <div id="panelHost"><!-- module panels injected here by JS --></div>
+  </main>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>
