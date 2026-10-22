@@ -1,11 +1,14 @@
 name: Build Android APK & Release
 
-# Push a tag like v1.2.0 (or run manually) to build the Android app
-# with Capacitor and publish a GitHub Release containing:
+# Bump the number in VERSION (e.g. 1.1.0) and push to main — or push a
+# tag like v1.2.0, or run it manually — to build the Android app with
+# Capacitor and publish a GitHub Release containing:
 #   • Slices.apk         – install directly on Android
 #   • Slices-web.zip     – the full offline web app (open index.html)
 on:
   push:
+    branches: [main]
+    paths: ['VERSION']
     tags: ['v*']
   workflow_dispatch:
 
@@ -31,7 +34,7 @@ jobs:
         id: ver
         run: |
           TAG="${GITHUB_REF_NAME}"
-          [[ "$TAG" == v* ]] || TAG="v1.0.${GITHUB_RUN_NUMBER}"
+          [[ "$TAG" == v* ]] || TAG="v$(tr -d ' \n' < VERSION)"
           NAME="${TAG#v}"
           IFS=. read -r MA MI PA <<< "$NAME"
           CODE=$(( ${MA:-1} * 10000 + ${MI:-0} * 100 + ${PA:-0} ))

@@ -154,10 +154,11 @@ Slices/
 
 ## 🚀 Releasing a new version
 
-Push a version tag and GitHub Actions builds the APK and publishes the release automatically:
+Bump the number in `VERSION` and push — GitHub Actions builds the APK and publishes the release automatically:
 
 ```bash
-git tag v1.1.0 && git push origin v1.1.0
+# edit VERSION to 1.1.0, then
+git commit -am "Release 1.1.0" && git push
 ```
 
 ## ➕ Adding a new topic
