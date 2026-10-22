@@ -8,7 +8,7 @@ name: Build Android APK & Release
 on:
   push:
     branches: [main]
-    paths: ['VERSION']
+    paths: ['VERSION', '.github/workflows/release.yml']
     tags: ['v*']
   workflow_dispatch:
 
@@ -29,6 +29,10 @@ jobs:
         with:
           distribution: temurin
           java-version: 17
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
 
       - name: Version info
         id: ver
@@ -66,24 +70,31 @@ jobs:
           npx cap add android
           npx cap sync android
 
-      - name: App icons, colors & version
+      - name: App icons, splash & version
         working-directory: build/android
         run: |
-          sudo apt-get install -y -qq imagemagick >/dev/null
-          RES=app/src/main/res
-          rm -rf $RES/mipmap-anydpi-v26
-          for pair in mdpi:48 hdpi:72 xhdpi:96 xxhdpi:144 xxxhdpi:192; do
-            d=${pair%%:*}; s=${pair##*:}
-            mkdir -p $RES/mipmap-$d
-            convert ../../icons/icon-1024.png -resize ${s}x${s} $RES/mipmap-$d/ic_launcher.png
-            convert ../../icons/icon-1024.png -resize ${s}x${s} $RES/mipmap-$d/ic_launcher_round.png
-            rm -f $RES/mipmap-$d/ic_launcher_foreground.png
-          done
-          # splash = dark background with centered icon
-          for f in $(find $RES -name 'splash.png'); do
-            W=$(identify -format '%w' $f); H=$(identify -format '%h' $f); S=$(( (W<H?W:H) / 3 ))
-            convert -size ${W}x${H} xc:'#0b1622' \( ../../icons/icon-1024.png -resize ${S}x${S} \) -gravity center -composite $f
-          done
+          set -euxo pipefail
+          python3 -m pip install --quiet pillow
+          python3 - <<'PY'
+          import os, glob
+          from PIL import Image
+          res = "app/src/main/res"
+          icon = Image.open("../../icons/icon-1024.png").convert("RGBA")
+          import shutil
+          shutil.rmtree(os.path.join(res, "mipmap-anydpi-v26"), ignore_errors=True)
+          for d, s in {"mdpi": 48, "hdpi": 72, "xhdpi": 96, "xxhdpi": 144, "xxxhdpi": 192}.items():
+              out = os.path.join(res, "mipmap-" + d); os.makedirs(out, exist_ok=True)
+              im = icon.resize((s, s), Image.LANCZOS)
+              for n in ("ic_launcher.png", "ic_launcher_round.png"): im.save(os.path.join(out, n))
+              fg = os.path.join(out, "ic_launcher_foreground.png")
+              if os.path.exists(fg): os.remove(fg)
+          for f in glob.glob(os.path.join(res, "**", "splash.png"), recursive=True):
+              w, h = Image.open(f).size; s = min(w, h) // 3
+              bg = Image.new("RGB", (w, h), "#0b1622")
+              ic = icon.resize((s, s), Image.LANCZOS); bg.paste(ic, ((w - s) // 2, (h - s) // 2), ic)
+              bg.save(f)
+          print("icons + splash done")
+          PY
           sed -i "s/versionCode [0-9]*/versionCode ${{ steps.ver.outputs.code }}/; s/versionName \"[^\"]*\"/versionName \"${{ steps.ver.outputs.name }}\"/" app/build.gradle
           grep -E "versionCode|versionName|applicationId" app/build.gradle
 
