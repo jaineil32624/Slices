@@ -1,0 +1,115 @@
+name: Build Android APK & Release
+
+# Push a tag like v1.2.0 (or run manually) to build the Android app
+# with Capacitor and publish a GitHub Release containing:
+#   • Slices.apk         – install directly on Android
+#   • Slices-web.zip     – the full offline web app (open index.html)
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Version info
+        id: ver
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          [[ "$TAG" == v* ]] || TAG="v1.0.${GITHUB_RUN_NUMBER}"
+          NAME="${TAG#v}"
+          IFS=. read -r MA MI PA <<< "$NAME"
+          CODE=$(( ${MA:-1} * 10000 + ${MI:-0} * 100 + ${PA:-0} ))
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+          echo "name=$NAME" >> $GITHUB_OUTPUT
+          echo "code=$CODE" >> $GITHUB_OUTPUT
+
+      - name: Collect web app into www/
+        run: |
+          mkdir -p build/www
+          cp -r index.html styles.css extras.css app.js extras.js sw.js manifest.webmanifest track.mp3 icons vendor build/www/
+          cd build/www && zip -qr ../../Slices-web.zip .
+
+      - name: Create Capacitor Android project
+        working-directory: build
+        run: |
+          npm init -y >/dev/null
+          npm install --no-audit --no-fund @capacitor/core@6 @capacitor/cli@6 @capacitor/android@6
+          cat > capacitor.config.json <<'EOF'
+          {
+            "appId": "io.github.jaineil32624.slices",
+            "appName": "Slices",
+            "webDir": "www",
+            "backgroundColor": "#0b1622",
+            "android": { "backgroundColor": "#0b1622" },
+            "server": { "androidScheme": "https" }
+          }
+          EOF
+          npx cap add android
+          npx cap sync android
+
+      - name: App icons, colors & version
+        working-directory: build/android
+        run: |
+          sudo apt-get install -y -qq imagemagick >/dev/null
+          RES=app/src/main/res
+          rm -rf $RES/mipmap-anydpi-v26
+          for pair in mdpi:48 hdpi:72 xhdpi:96 xxhdpi:144 xxxhdpi:192; do
+            d=${pair%%:*}; s=${pair##*:}
+            mkdir -p $RES/mipmap-$d
+            convert ../../icons/icon-1024.png -resize ${s}x${s} $RES/mipmap-$d/ic_launcher.png
+            convert ../../icons/icon-1024.png -resize ${s}x${s} $RES/mipmap-$d/ic_launcher_round.png
+            rm -f $RES/mipmap-$d/ic_launcher_foreground.png
+          done
+          # splash = dark background with centered icon
+          for f in $(find $RES -name 'splash.png'); do
+            W=$(identify -format '%w' $f); H=$(identify -format '%h' $f); S=$(( (W<H?W:H) / 3 ))
+            convert -size ${W}x${H} xc:'#0b1622' \( ../../icons/icon-1024.png -resize ${S}x${S} \) -gravity center -composite $f
+          done
+          sed -i "s/versionCode [0-9]*/versionCode ${{ steps.ver.outputs.code }}/; s/versionName \"[^\"]*\"/versionName \"${{ steps.ver.outputs.name }}\"/" app/build.gradle
+          grep -E "versionCode|versionName|applicationId" app/build.gradle
+
+      - name: Build APK
+        working-directory: build/android
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleDebug --no-daemon -q
+          cp app/build/outputs/apk/debug/app-debug.apk ../../Slices.apk
+          ls -la ../../Slices.apk
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.ver.outputs.tag }}
+          name: Slices ${{ steps.ver.outputs.tag }}
+          make_latest: true
+          files: |
+            Slices.apk
+            Slices-web.zip
+          body: |
+            ## 📐 Slices ${{ steps.ver.outputs.tag }} — Calculus 1, 2 & 3 Lab
+
+            | | |
+            |---|---|
+            | 🤖 **Android** | Download **Slices.apk** below → open it → allow *Install unknown apps* if asked |
+            | 🌐 **Web** | Play instantly at **https://jaineil32624.github.io/Slices/** |
+            | 💻 **Install as an app** | Open the website in Chrome/Edge → ⬇ *Get the app* → *Install* |
+            | 🍎 **iPhone / iPad** | Open the website in Safari → Share → *Add to Home Screen* |
+            | 📦 **Offline zip** | Unzip **Slices-web.zip** and open `index.html` |
+
+            Works fully offline once installed. No account, no ads, no tracking.

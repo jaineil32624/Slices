@@ -284,6 +284,8 @@ function makeMapper(rect, xMin, xMax, yMin, yMax, pad) {
   return { toPx: (x, y) => [pad + (x - xMin) * sx, pad + h - (y - yMin) * sy], pad, w, h, sx, sy };
 }
 function drawAxes(ctx, rect, xMin, xMax, yMin, yMax, mapper) {
+  // remember the current world↔pixel view so extras.js can read hover / drag coordinates
+  ctx.canvas._view = { xMin, xMax, yMin, yMax, pad: mapper.pad, w: mapper.w, h: mapper.h, sx: mapper.sx, sy: mapper.sy };
   ctx.clearRect(0, 0, rect.width, rect.height);
   ctx.strokeStyle = "#16283d"; ctx.lineWidth = 1;
   const stepX = niceStep(xMax - xMin), stepY = niceStep(yMax - yMin);
@@ -358,7 +360,8 @@ class Scene3D {
     this.container = container;
     this.scene = new THREE.Scene();
     this.camera = new THREE.PerspectiveCamera(45, 1, 0.1, 100);
-    this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true });
+    container._scene3d = this;
     this.renderer.domElement.style.position = "absolute";
     this.renderer.domElement.style.inset = "0";
     container.appendChild(this.renderer.domElement);
@@ -370,17 +373,35 @@ class Scene3D {
     this.orbit = { theta: Math.PI * 0.28, phi: Math.PI * 0.32, radius: 8.5 };
     this._updateCam();
 
+    this.autoRotate = false;
     let dragging = false, lastX = 0, lastY = 0;
     const el = this.renderer.domElement;
-    el.addEventListener("pointerdown", e => { dragging = true; lastX = e.clientX; lastY = e.clientY; });
-    window.addEventListener("pointerup", () => dragging = false);
+    el.style.touchAction = "none";
+    // one finger / mouse = orbit, two fingers = pinch zoom
+    const pts = new Map();
+    let pinchDist = 0;
+    el.addEventListener("pointerdown", e => {
+      pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (pts.size === 2) { const [a, b] = [...pts.values()]; pinchDist = Math.hypot(a.x - b.x, a.y - b.y); dragging = false; }
+      else { dragging = true; lastX = e.clientX; lastY = e.clientY; }
+    });
+    const release = e => { pts.delete(e.pointerId); if (pts.size === 0) dragging = false; };
+    window.addEventListener("pointerup", release);
+    window.addEventListener("pointercancel", release);
     window.addEventListener("pointermove", e => {
+      if (pts.has(e.pointerId)) pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (pts.size === 2) {
+        const [a, b] = [...pts.values()]; const d = Math.hypot(a.x - b.x, a.y - b.y);
+        if (pinchDist) { this.orbit.radius = Math.min(20, Math.max(2.5, this.orbit.radius * pinchDist / d)); this._updateCam(); }
+        pinchDist = d; return;
+      }
       if (!dragging) return;
       const dx = e.clientX - lastX, dy = e.clientY - lastY; lastX = e.clientX; lastY = e.clientY;
       this.orbit.theta -= dx * 0.006;
       this.orbit.phi = Math.min(Math.PI * 0.49, Math.max(0.06, this.orbit.phi - dy * 0.006));
       this._updateCam();
     });
+    el.addEventListener("dblclick", () => this.resetView());
     el.addEventListener("wheel", e => {
       e.preventDefault();
       this.orbit.radius = Math.min(20, Math.max(2.5, this.orbit.radius + e.deltaY * 0.01));
@@ -390,6 +411,10 @@ class Scene3D {
     this._loop = this._loop.bind(this);
     this._running = true;
     requestAnimationFrame(this._loop);
+  }
+  resetView() {
+    this.orbit = { theta: Math.PI * 0.28, phi: Math.PI * 0.32, radius: 8.5 };
+    this._updateCam();
   }
   _updateCam() {
     const { theta, phi, radius } = this.orbit;
@@ -411,6 +436,8 @@ class Scene3D {
   }
   _loop() {
     requestAnimationFrame(this._loop);
+    if (!this.container.offsetParent && !document.fullscreenElement) return; // panel hidden: skip GPU work
+    if (this.autoRotate) { this.orbit.theta += 0.004; this._updateCam(); }
     this.renderer.render(this.scene, this.camera);
   }
 }
@@ -495,6 +522,8 @@ function activateModule(id) {
   if (!mod._inited) { mod.init(panel); mod._inited = true; }
   else if (mod.onShow) mod.onShow();
   closeMobileNav();
+  if (location.hash.slice(1) !== id) history.replaceState(null, "", "#" + id);
+  document.dispatchEvent(new CustomEvent("slices:module", { detail: { id, mod, panel } }));
 }
 window.addEventListener("resize", () => {
   const mod = MODULES.find(m => m.id === CURRENT_ID);
@@ -1898,7 +1927,12 @@ function closeMobileNav() {
 }
 window.addEventListener("load", () => {
   buildSidebar();
-  activateModule(MODULES[0].id);
+  const fromHash = location.hash.slice(1);
+  activateModule(MODULES.some(m => m.id === fromHash) ? fromHash : MODULES[0].id);
+  window.addEventListener("hashchange", () => {
+    const h = location.hash.slice(1);
+    if (h !== CURRENT_ID && MODULES.some(m => m.id === h)) activateModule(h);
+  });
   initMusic();
 
   const hamburger = document.getElementById("hamburger");

@@ -1,0 +1,23 @@
+{
+  "name": "Slices — Calculus 1, 2 & 3 Lab",
+  "short_name": "Slices",
+  "description": "Interactive, animated calculus labs: limits, derivatives, integrals, series, vectors, gradients, multiple integrals and the big theorems.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#0b1622",
+  "theme_color": "#0b1622",
+  "categories": ["education", "productivity"],
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" },
+    { "src": "icons/icon.svg", "sizes": "any", "type": "image/svg+xml" }
+  ],
+  "shortcuts": [
+    { "name": "Derivatives", "url": "./index.html#der" },
+    { "name": "Series", "url": "./index.html#seq" },
+    { "name": "Vector Fields", "url": "./index.html#vf" }
+  ]
+}
